@@ -1,4 +1,6 @@
 build/
 datasets/
+output/
+solutions/
 note.md
 plan.md
