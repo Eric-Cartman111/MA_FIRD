@@ -10,6 +10,7 @@
 #include <iostream>
 #include <algorithm>
 #include <chrono>
+#include <vector>
 #include "Config.hpp"
 #include "Random.hpp"
 #include "Parameters.hpp"
@@ -24,6 +25,7 @@ private:
     Data *data = nullptr;
     Searcher searcher;
     Solution *best_solution = nullptr;
+    std::vector<Solution*> initial_solutions;
 public:
     Algorithm(Parameters *params);
     Algorithm() = default;

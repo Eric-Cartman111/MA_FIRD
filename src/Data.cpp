@@ -42,7 +42,7 @@ void Data::read() {
                 ++line_id;
             }
             depot = nodes[0];
-        } else if (dataset.front() == 'J') {
+        } else if (dataset.front() == 'J'|| dataset.front() == 'L') {
             file.open(data_dir + filename + ".vrpsdptw");
             while (std::getline(file, line)) {
                 std::istringstream iss(line);

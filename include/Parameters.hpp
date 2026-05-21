@@ -32,6 +32,8 @@ public:
     int population_size;
     double fit_coef;
     double adjust_factor;
+    bool enable_tabu;
+    int tabu_tenure_max;
     Parameters(int argc, char **argv);
     Parameters() = default;
     ~Parameters() = default;

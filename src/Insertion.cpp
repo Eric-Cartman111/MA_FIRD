@@ -126,6 +126,11 @@ void Insertion::infeasibleBestInsert(std::vector<Route*> &routes, std::vector<No
 }
 
 void Insertion::infeasibleRegretInsert(std::vector<Route*> &routes, std::vector<Node *> &nodes) {
+    if (routes.empty()) {
+        auto route = new Route(data->depot);
+        route->update();
+        routes.emplace_back(route);
+    }
     while (!nodes.empty()) {
         double best_regret = -INF;
         Route *best_route = nullptr;

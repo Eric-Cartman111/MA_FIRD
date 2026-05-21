@@ -23,6 +23,8 @@ Parameters::Parameters(int argc, char **argv) {
     parser.add<double>("init_ratio", 'r', "init ratio for ARIX", false, INIT_RATIO);
     parser.add<double>("fit_coef", 'y', "fitness coefficient", false, FIT_COEF);
     parser.add<double>("adjust_factor", 'u', "adjust factor", false, ADJUST_FACTOR);
+    parser.add<bool>("enable_tabu", 0, "enable tabu", false, TABU_ENABLED);
+    parser.add<int>("tabu_tenure_max", 0, "max tabu tenure", false, TABU_TENURE_MAX);
     parser.parse_check(argc, argv);
 
     this->datasets_index = parser.get<int>("datasets");
@@ -58,6 +60,8 @@ Parameters::Parameters(int argc, char **argv) {
     this->population_size = parser.get<int>("population_size");
     this->fit_coef = parser.get<double>("fit_coef");
     this->adjust_factor = parser.get<double>("adjust_factor");
+    this->enable_tabu = parser.get<bool>("enable_tabu");
+    this->tabu_tenure_max = parser.get<int>("tabu_tenure_max");
 }
 
 void Parameters::print() const {
@@ -76,6 +80,8 @@ void Parameters::print() const {
                 << " fit_coef: " << fit_coef
                 << " init_ratio: " << init_ratio
                 << " adjust_factor: " << adjust_factor
+                << " enable_tabu: " << (enable_tabu ? 1 : 0)
+                << " tabu_tenure_max: " << tabu_tenure_max
                 << std::endl
                 << std::endl;
 }

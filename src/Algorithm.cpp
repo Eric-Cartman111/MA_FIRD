@@ -14,6 +14,10 @@ Algorithm::Algorithm(Parameters *params) {
 }
 
 Algorithm::~Algorithm() {
+    for (auto *sol : initial_solutions) {
+        delete sol;
+    }
+    initial_solutions.clear();
     delete params;
     delete random;
     delete data;
@@ -31,11 +35,19 @@ void Algorithm::run() {
     this->setContext();
     // start
     auto start = std::chrono::high_resolution_clock::now();
-    // initial solution
-    auto current_solution = new Solution();
-    current_solution->init();
-    current_solution = searcher.FIRD(current_solution);
-    best_solution = new Solution(*current_solution);
+    // initial solutions
+    int init_trials = 10;
+    Solution *best_init = nullptr;
+    for (int i = 0; i < init_trials; ++i) {
+        auto candidate = new Solution();
+        candidate->init();
+        candidate = searcher.FIRD(candidate);
+        initial_solutions.emplace_back(candidate);
+        if (candidate->betterThan(best_init)) {
+            best_init = candidate;
+        }
+    }
+    best_solution = new Solution(*best_init);
     if (LOG_LEVEL > 0) best_solution->write(0);
     // iteration
     int iter = 0, best_iter = 0, stagnation = 0;
@@ -89,6 +101,5 @@ void Algorithm::run() {
               << " solution_file: " << params->filename + "-" + params->timestamp + "-"+ std::to_string(best_iter)
               << std::endl << std::endl;
 
-    delete current_solution;
 }
 

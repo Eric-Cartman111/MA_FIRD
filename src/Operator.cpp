@@ -18,6 +18,10 @@ void Operator::setContext(Random *_random, Parameters *_params, Data *_data) {
 
 void Operator::init(bool flag) {
     adjust_factor = params->adjust_factor;
+    tabu_enabled = params->enable_tabu;
+    tabu_tenure_max = params->tabu_tenure_max;
+    tabu_step = 0;
+    tabu_until.clear();
     if (flag) {
         // solution is feasible
         w1 = min_pr, w2 = min_pr;
@@ -249,6 +253,8 @@ void Operator::_interRelocate(Solution *solution, Route *ri, Route *rj, int len,
             Node *first_i = nodes_i[i], *last_i = nodes_i[i+len-1], *pj = nodes_j[j];
             Node *prev_i = first_i->prev, *prev_j = pj->prev, *next_i = last_i->next, *next_j = pj->next;
             res.count++;
+            SuperNode sn(first_i, last_i, len);
+            if (isTabuSuperNode(sn, rj->id)) continue;
             if (skip(rj->id, pj->id, first_i->id) || skip(rj->id, last_i->id, next_j->id) ||
                 skip(ri->id, prev_i->id, next_i->id)) continue;
             double dist4 = data->distances[prev_i->id][next_i->id], dist5 = data->distances[pj->id][first_i->id], dist6 = data->distances[last_i->id][next_j->id];
@@ -273,7 +279,6 @@ void Operator::_interRelocate(Solution *solution, Route *ri, Route *rj, int len,
             double load_delta1 = overload1 - ri->overload;
             double load_delta2 = overload2 - rj->overload;
             double load_delta = load_delta1 + load_delta2;
-            SuperNode sn(first_i, last_i, len);
             double penalty = penaltyForSuperNode(sn) + penaltyForNode(pj);
             double v1 = std::max(time_delta, 0.0);
             if (v1 > 0) v1 += penalty;
@@ -330,6 +335,9 @@ void Operator::_interSwap(Solution *solution, Route *ri, Route *rj, int len_i, i
             res.count++;
             Node *first_i = nodes_i[i], *last_i = nodes_i[i+len_i-1], *first_j = nodes_j[j], *last_j = nodes_j[j+len_j-1];
             Node *prev_i = first_i->prev, *prev_j = first_j->prev, *next_i = last_i->next, *next_j = last_j->next;
+            SuperNode sni(first_i, last_i, len_i);
+            SuperNode snj(first_j, last_j, len_j);
+            if (isTabuSuperNode(sni, rj->id) || isTabuSuperNode(snj, ri->id)) continue;
             if (skip(ri->id, prev_i->id, first_j->id) || skip(ri->id, last_j->id, next_i->id) ||
                 skip(rj->id, prev_j->id, first_i->id) || skip(rj->id, last_i->id, next_j->id)) continue;
             double dist5 = data->distances[prev_i->id][first_j->id], dist6 = data->distances[last_j->id][next_i->id], dist7 = data->distances[prev_j->id][first_i->id], dist8 = data->distances[last_i->id][next_j->id];
@@ -353,8 +361,6 @@ void Operator::_interSwap(Solution *solution, Route *ri, Route *rj, int len_i, i
             double load_delta1 = overload1 - ri->overload;
             double load_delta2 = overload2 - rj->overload;
             double load_delta = load_delta1 + load_delta2;
-            SuperNode sni(first_i, last_i, len_i);
-            SuperNode snj(first_j, last_j, len_j);
             double penalty = penaltyForSuperNode(sni) + penaltyForSuperNode(snj);
             double v1 = std::max(time_delta, 0.0);
             if (v1 > 0) v1 += penalty;
@@ -407,6 +413,7 @@ void Operator::_twoOptStar(Solution *solution, Route *ri, Route *rj, EvalResult 
             if (nodes_i[i]->next->id == 0 && nodes_j[j]->next->id == 0) continue;
             Node *pi = nodes_i[i], *pj = nodes_j[j];
             res.count++;
+            if (isTabuSegment(pi->next, ri->head, rj->id) || isTabuSegment(pj->next, rj->head, ri->id)) continue;
             if (skip(ri->id, pi->id, pj->next->id) || skip(rj->id, pj->id, pi->next->id)) continue;
             double dist3 = data->distances[pi->id][pj->next->id], dist4 = data->distances[pj->id][pi->next->id];
             double time_dist3 = data->time_distances[pi->id][pj->next->id], time_dist4 = data->time_distances[pj->id][pi->next->id];
@@ -588,5 +595,76 @@ EvalResult Operator::operate(Solution *solution, int operate) {
         default:
             break;
     }
+    updateTabuOnAccept(res);
     return res;
+}
+
+long long Operator::tabuKey(int node_id, int route_id) const {
+    return (static_cast<long long>(node_id) << 32) | static_cast<unsigned int>(route_id);
+}
+
+bool Operator::isTabuMove(int node_id, int route_id) const {
+    if (!tabu_enabled) return false;
+    auto it = tabu_until.find(tabuKey(node_id, route_id));
+    if (it == tabu_until.end()) return false;
+    return tabu_step < it->second;
+}
+
+bool Operator::isTabuSuperNode(const SuperNode &node, int route_id) const {
+    if (!tabu_enabled || node.first == nullptr) return false;
+    Node *p = node.first;
+    for (int i = 0; i < node.len; ++i) {
+        if (isTabuMove(p->id, route_id)) return true;
+        p = p->next;
+    }
+    return false;
+}
+
+bool Operator::isTabuSegment(Node *start, Node *head, int route_id) const {
+    if (!tabu_enabled || start == nullptr || head == nullptr) return false;
+    Node *p = start;
+    while (p != head) {
+        if (isTabuMove(p->id, route_id)) return true;
+        p = p->next;
+    }
+    return false;
+}
+
+void Operator::setTabuSuperNode(const SuperNode &node, int route_id) {
+    if (!tabu_enabled || node.first == nullptr) return;
+    int tenure = random->randomInt(tabu_tenure_max) + 1;
+    Node *p = node.first;
+    for (int i = 0; i < node.len; ++i) {
+        tabu_until[tabuKey(p->id, route_id)] = tabu_step + tenure;
+        p = p->next;
+    }
+}
+
+void Operator::setTabuSegment(Node *start, Node *head, int route_id) {
+    if (!tabu_enabled || start == nullptr || head == nullptr) return;
+    int tenure = random->randomInt(tabu_tenure_max) + 1;
+    Node *p = start;
+    while (p != head) {
+        tabu_until[tabuKey(p->id, route_id)] = tabu_step + tenure;
+        p = p->next;
+    }
+}
+
+void Operator::updateTabuOnAccept(const EvalResult &res) {
+    if (!tabu_enabled || !res.accepted) return;
+    tabu_step++;
+    if (res.ri == nullptr || res.rj == nullptr) return;
+
+    if (res.type.rfind("INTER_RELOCATE", 0) == 0) {
+        if (res.spi.first == nullptr) return;
+        setTabuSuperNode(res.spi, res.ri->id);
+    } else if (res.type.rfind("INTER_SWAP", 0) == 0) {
+        if (res.spi.first == nullptr || res.spj.first == nullptr) return;
+        setTabuSuperNode(res.spi, res.ri->id);
+        setTabuSuperNode(res.spj, res.rj->id);
+    } else if (res.type == "TWO_OPT_STAR") {
+        if (res.pi == nullptr || res.pj == nullptr) return;
+        setTabuSegment(res.pi->next, res.ri->head, res.ri->id);
+        setTabuSegment(res.pj->next, res.rj->head, res.rj->id);
+    }
 }

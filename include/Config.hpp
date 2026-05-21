@@ -30,6 +30,8 @@ const int POPULATION_SIZE = 10;
 const double INIT_RATIO = 0.9;
 const double FIT_COEF = 0.8;
 const double ADJUST_FACTOR = 0.5;
+const bool TABU_ENABLED = true;
+const int TABU_TENURE_MAX = 10;
 
 const std::vector<std::string> DATASETS = {
     "WC_small/",
